@@ -60,7 +60,7 @@ def build_visualization(
 
     net = Network(height="760px", width="100%", directed=True, bgcolor="#ffffff", font_color="#222222",
                   cdn_resources="remote")
-    net.barnes_hut(gravity=-4000, spring_length=140, spring_strength=0.02, damping=0.5)
+    net.barnes_hut(gravity=-12000, spring_length=260, spring_strength=0.012, damping=0.6)
 
     for url in graph.nodes:
         page = pages.get(url)
@@ -69,7 +69,7 @@ def build_visualization(
         title = (page.title if page else None) or url
         in_deg, out_deg = graph.in_degree(url), graph.out_degree(url)
         word_count = len(page.text.split()) if page else 0
-        short_label = title if len(title) <= 40 else title[:37] + "..."
+        short_label = title if len(title) <= 22 else title[:19] + "..."
 
         net.add_node(
             url,
@@ -77,6 +77,7 @@ def build_visualization(
             title=html.escape(f"{title}\n{url}\nIn: {in_deg}  Out: {out_deg}  Words: {word_count}"),
             shape="diamond" if is_orphan else "dot",
             size=12 + min(in_deg, 10) * 2,
+            font={"size": 12},
             color={"background": _section_color(section, sections), "border": ORPHAN_BORDER if is_orphan else "#333333"},
             borderWidth=3 if is_orphan else 1,
             section=section, isOrphan=is_orphan, isNotAnalyzed=False, pageTitle=title,
@@ -88,12 +89,13 @@ def build_visualization(
     for url, reason in not_analyzed.items():
         if url in graph.nodes:
             continue
-        short_label = (url.rstrip("/").rsplit("/", 1)[-1] or url)[:37]
+        short_label = (url.rstrip("/").rsplit("/", 1)[-1] or url)[:19]
         net.add_node(
             url,
             label=short_label,
             title=html.escape(f"Not analyzed this run: {reason}\n{url}"),
             shape="triangle",
+            font={"size": 12},
             color={"background": NOT_ANALYZED_COLOR, "border": "#999999"},
             size=10,
             section="not_analyzed", isOrphan=False, isNotAnalyzed=True, pageTitle=url,
@@ -122,7 +124,6 @@ def build_visualization(
             opp.source_url, opp.target_url,
             id=f"opp-{edge_id}",
             color=color, dashes=True, arrows="to",
-            label=opp.relationship_type,
             title=html.escape(
                 f"Recommended ({opp.confidence_label} confidence)\n"
                 f"Relationship: {opp.relationship_type}\nAnchor: {opp.recommended_anchor_text}"
