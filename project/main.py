@@ -40,6 +40,7 @@ def load_config() -> dict:
         "website_domain": os.getenv("WEBSITE_DOMAIN"),
         "sitemap_path": os.getenv("SITEMAP_PATH"),
         "validation_limit": int(os.getenv("VALIDATION_LIMIT", "5")),
+        "url_include_pattern": os.getenv("URL_INCLUDE_PATTERN"),
         "jev_concurrency": int(os.getenv("JEV_CONCURRENCY", "5")),
         "relevance_threshold": float(os.getenv("RELEVANCE_THRESHOLD", "0.5")),
     }
@@ -75,6 +76,12 @@ def main() -> None:
         sys.exit(1)
 
     inventory = run_sitemap_ingestion(config["sitemap_path"])
+
+    pattern = config["url_include_pattern"]
+    if pattern:
+        before = len(inventory)
+        inventory = [entry for entry in inventory if pattern in entry["url"]]
+        print(f"URL_INCLUDE_PATTERN={pattern!r} matched {len(inventory)}/{before} sitemap URL(s)")
 
     limit = config["validation_limit"]
     target_urls = [entry["url"] for entry in inventory[:limit]]

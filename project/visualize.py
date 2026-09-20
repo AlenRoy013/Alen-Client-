@@ -140,7 +140,7 @@ def build_visualization(
 
     net.set_options(json.dumps({
         "interaction": {"hover": True, "tooltipDelay": 100},
-        "physics": {"stabilization": {"iterations": 300}},
+        "physics": {"enabled": True, "stabilization": {"enabled": True, "iterations": 300}},
     }))
 
     net.write_html(output_path, notebook=False)
@@ -279,6 +279,13 @@ _PANEL_SCRIPT = """
     out += '<div style="color:#888; font-size:11px; margin-top:4px;">Relevance/relationship come from Jev. Reason/anchor/context are template-generated from page metadata, not written by Jev.</div>';
     return out;
   }
+
+  // Physics runs only to find an initial layout, then stops -- otherwise
+  // vis-network keeps applying forces indefinitely and nodes never settle,
+  // especially with several disconnected components repelling each other.
+  network.once('stabilizationIterationsDone', function () {
+    network.setOptions({ physics: false });
+  });
 
   network.on('click', function (params) {
     var detailsDiv = document.getElementById('ili-details');
