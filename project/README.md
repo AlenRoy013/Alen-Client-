@@ -42,69 +42,93 @@ per project constraints. Intermediate state is JSON files under
 | Phase | Status |
 |---|---|
 | 1. Environment setup | Done |
-| 2. Sitemap processing | Done — `sitemap_utils.py`, 9 passing tests in `tests/` |
-| 3. Jev-powered page analysis | **Blocked** — see below |
-| 4+. Link graph, opportunities, orphans, visualization | Not started (depend on Phase 3) |
+| 2. Sitemap processing | Done — `sitemap_utils.py` |
+| 3. Page content extraction | Done — `page_fetch.py` (stdlib `urllib` + `html.parser` only) |
+| 3. Jev-powered page-pair judgment | Done — `jev_client.py`, real `typesafe-sdk` 0.7.0 | 
+| 4. Existing link graph + orphan detection | Done — `pipeline.py` (networkx) |
+| 6. Opportunity text assembly | Done — `opportunity_text.py` |
+| Live end-to-end run (real site + real Jev call) | **Cannot run from this sandbox** — see below |
+| 7. Interactive visualization | Not started |
 
-## Jev verification status — blocked
+31 tests pass: `python3 -m pytest tests/`.
 
-This project's own rule is: *do not assume Jev's API capabilities or invent
-endpoint syntax.* That rule could not be satisfied yet:
+## Jev — verified capabilities (confirmed against real docs + the installed SDK)
 
-- Direct fetches from this environment to `docs.typesafe.ai`,
-  `docs.aimlapi.com`, `www.langchain.com`, `pydantic.dev`, and
-  `developers.cloudflare.com` all failed with `EGRESS_BLOCKED` — this
-  sandbox's network proxy does not allow reaching any of them.
-- A web-search summarizer (the only external-info tool that worked) returned
-  two descriptions of "Jev by TypeSafe AI" that **contradict each other**:
-  one gave the endpoint as `https://api.aimlapi.com/v1/decisions` with
-  `pip install typesafe-sdk`; the other gave `POST https://api.typesafe.ai/v1/systemone`
-  with an unspecified SDK and a waitlist-gated access model. Neither could be
-  cross-checked against a primary source.
+- `system_one(state, questions)` evaluates a `state` (text/JSON/array) the
+  caller supplies against named `Noul`/`Choice`/`Score` questions, returning
+  typed answers — never free text. Installed `typesafe-sdk==0.7.0`'s public
+  API matches the docs exactly (checked directly against the installed
+  classes).
+- **Jev cannot fetch a URL itself.** That's why `page_fetch.py` exists: a
+  minimal, stdlib-only single-page fetcher (no BeautifulSoup/Scrapy/
+  Playwright/Puppeteer/`requests`), used to turn each sitemap URL into text
+  before Jev ever sees it.
+- **Jev cannot generate free text.** `reason`, `recommended_anchor_text`,
+  and `suggested_context` are assembled from extracted page metadata by
+  `opportunity_text.py`, not by Jev — every opportunity carries
+  `text_source="template"` and `score_source="jev"` so the two are never
+  conflated.
+- `ScoreAnswer.score` is a probability-weighted average over an **ordered
+  rubric's indices** (e.g. 0-3 for a 4-item rubric, can fall between
+  levels) — not a 0-1 similarity value. `jev_client.py` normalizes it to
+  `relevance_score_normalized` (0-1) for comparability.
+- No documented multi-state batch endpoint: one call judges one page pair
+  (several questions per call, in parallel). Analyzing many pairs means many
+  concurrent calls (`AsyncTypeSafeClient`, bounded by `JEV_CONCURRENCY`).
+  `RetryPolicy` already retries 408/429/5xx with backoff, so `jev_client.py`
+  leans on that instead of reimplementing it; a failure on one pair is
+  captured as a `JevJudgmentError` rather than aborting the whole batch.
+- Pricing isn't documented anywhere verified. Each response's `usage`
+  (input/output token counts) is surfaced instead of assuming a $/token
+  figure, so real cost can be tracked empirically.
 
-Writing `jev_client.py` against either would mean guessing request/response
-syntax and silently risking fabricated results in every phase downstream of
-it (topics, relationships, anchor text) — which is exactly what this project
-forbids. `jev_client.py` currently raises `JevNotVerifiedError` with this
-explanation instead of calling anything.
+## Live end-to-end run — cannot execute from this sandbox
 
-**One open question also needs an answer before Phase 3 can be designed
-correctly, not just implemented:** every unverified description found calls
-Jev a "System One" **decision model** — it evaluates a "state" you give it
-against typed questions (yes/no, choice, score) and returns calibrated
-answers. Nothing found describes it as a web-browsing/retrieval agent. If
-that's accurate, Jev cannot fetch a URL's content by itself — something has
-to extract page content and hand it to Jev as input. That would conflict
-with the constraint banning all standard HTTP-fetch/parsing libraries,
-since *some* minimal content-retrieval step becomes unavoidable no matter
-what it's called. This needs your call, not a silent workaround.
+This session's outbound network goes through an org-level egress proxy that
+allow-lists specific hosts (package registries, Anthropic's own API, etc.)
+and denies everything else. This was confirmed directly, not assumed —
+`curl -sS $HTTPS_PROXY/__agentproxy/status` shows explicit `403` policy
+denials for both:
 
-### To unblock
+- `example.com:443` (a stand-in test fetch)
+- `api.typesafe.ai:443` (Jev's real API host)
 
-Provide one of:
-1. The raw text (or a pasted excerpt) of Jev's actual API reference —
-   auth, endpoint(s), request/response schema, batch support, rate limits.
-2. A `curl`/Python example you've already run successfully against it.
-3. Confirmation of whether Jev can retrieve page content from a URL itself,
-   or only evaluate content it's given.
+Per that proxy's own operating instructions: a 403/407 here means "not
+allowed by your organization's egress policy for this session... do not
+retry or route around it." So even with a real `JEV_API_KEY`, this sandbox
+cannot make the live call, and it cannot fetch pages from a real website
+either.
 
-Once any of these lands, `jev_client.py` gets implemented against it, and
-Phases 4-9 (graph, opportunities, orphans, clusters, visualization) proceed
-on top of the same `data/output/urls.json` already being produced.
+**What this means practically:** the code is written and tested against
+real interfaces — `jev_client.py`'s tests construct actual
+`typesafe_sdk.ScoreAnswer`/`ChoiceAnswer`/`SystemOneResponse` objects (the
+installed package's own classes) as fixtures, not hand-rolled guesses — but
+the Phase 3/10 "test with 5 real URLs" step needs to run somewhere with
+outbound network access to both the target site and `api.typesafe.ai`:
+your own machine, or a CI/cloud environment without this restriction.
+There's no API key that fixes this from here.
 
 ## Running what exists today
 
 ```
 pip install -r requirements.txt
-python3 main.py          # runs Phase 1-2, writes data/output/urls.json
-python3 -m pytest tests/ # 9 tests covering sitemap parsing edge cases
+python3 -m pytest tests/   # 31 tests, no network required
+python3 main.py            # sitemap -> fetch -> graph -> orphans -> (if JEV_API_KEY set) opportunities
 ```
 
 Configure `project/.env`:
 ```
 JEV_API_KEY=
+JEV_API_BASE_URL=       # optional, defaults to https://api.typesafe.ai
+JEV_MODEL=               # optional, defaults to the SDK's own default (jev-latest)
 WEBSITE_DOMAIN=
 SITEMAP_PATH=
+VALIDATION_LIMIT=5       # how many sitemap URLs to process per run
+JEV_CONCURRENCY=5
+RELEVANCE_THRESHOLD=0.5  # normalized 0-1 minimum to surface an opportunity
 ```
 `SITEMAP_PATH` accepts a local file path or a remote URL, and follows
-sitemap-index files recursively.
+sitemap-index files recursively. Outputs land in `data/output/`:
+`urls.json`, `page_analysis.json`, `existing_link_graph.json`,
+`orphan_pages.csv`, and — once Jev runs — `internal_link_opportunities.csv`
+(plus `jev_errors.json` for any failed calls).
