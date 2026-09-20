@@ -89,6 +89,7 @@ async def find_opportunities(
     model: str | None,
     concurrency: int,
     relevance_threshold: float,
+    max_per_source: int = 3,
 ) -> tuple[list[LinkOpportunity], list[JevJudgmentError]]:
     pairs = _candidate_pairs(pages, graph)
     if not pairs:
@@ -112,4 +113,22 @@ async def find_opportunities(
         )
         if opp is not None:
             opportunities.append(opp)
-    return opportunities, errors
+
+    return _cap_per_source(opportunities, max_per_source), errors
+
+
+def _cap_per_source(opportunities: list[LinkOpportunity], max_per_source: int) -> list[LinkOpportunity]:
+    """Keep only the strongest few recommendations per source page. Without
+    this, a page topically similar to many others (common in a niche blog)
+    gets recommended a link to nearly every one of them -- exactly the
+    "excessive linking" this project's own rules rule out, and it makes the
+    graph an unreadable tangle for no practical benefit."""
+    by_source: dict[str, list[LinkOpportunity]] = {}
+    for opp in opportunities:
+        by_source.setdefault(opp.source_url, []).append(opp)
+
+    kept = []
+    for source_opps in by_source.values():
+        source_opps.sort(key=lambda o: (o.relevance_score, o.relevance_confidence), reverse=True)
+        kept.extend(source_opps[:max_per_source])
+    return kept

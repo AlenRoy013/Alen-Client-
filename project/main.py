@@ -43,6 +43,7 @@ def load_config() -> dict:
         "url_include_pattern": os.getenv("URL_INCLUDE_PATTERN"),
         "jev_concurrency": int(os.getenv("JEV_CONCURRENCY", "5")),
         "relevance_threshold": float(os.getenv("RELEVANCE_THRESHOLD", "0.5")),
+        "max_opportunities_per_source": int(os.getenv("MAX_OPPORTUNITIES_PER_SOURCE", "3")),
     }
     missing = [k for k in ("website_domain", "sitemap_path") if not config[k]]
     if missing:
@@ -133,6 +134,7 @@ def main() -> None:
             model=config["jev_model"],
             concurrency=config["jev_concurrency"],
             relevance_threshold=config["relevance_threshold"],
+            max_per_source=config["max_opportunities_per_source"],
         ))
 
         with open(OUTPUT_DIR / "internal_link_opportunities.csv", "w", newline="") as f:

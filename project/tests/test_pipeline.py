@@ -3,10 +3,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from opportunity_text import LinkOpportunity  # noqa: E402
 from page_fetch import ExtractedLink, ExtractedPage  # noqa: E402
-from pipeline import _candidate_pairs, build_existing_link_graph, detect_orphans  # noqa: E402
+from pipeline import _candidate_pairs, _cap_per_source, build_existing_link_graph, detect_orphans  # noqa: E402
 
 A, B, C = "https://example.com/a", "https://example.com/b", "https://example.com/c"
+
+
+def opportunity(source, target, score, confidence=0.9):
+    return LinkOpportunity(
+        source_url=source, source_title="S", target_url=target, target_title="T",
+        relationship_type="related", relevance_score=score, relevance_confidence=confidence,
+        confidence_label="high", recommended_anchor_text="anchor", suggested_context="ctx",
+        reason="reason", requires_editorial_review=False,
+    )
 
 
 def page(url, links=None, error=None, title=None, text="some content here"):
@@ -77,3 +87,25 @@ def test_candidate_pairs_excludes_failed_fetches():
     graph = build_existing_link_graph(pages)
     pairs = _candidate_pairs(pages, graph)
     assert pairs == []
+
+
+def test_cap_per_source_keeps_strongest_n_by_relevance():
+    opps = [
+        opportunity(A, "t1", score=0.9),
+        opportunity(A, "t2", score=0.95),
+        opportunity(A, "t3", score=0.5),
+        opportunity(A, "t4", score=0.7),
+    ]
+    kept = _cap_per_source(opps, max_per_source=2)
+    assert [o.target_url for o in kept] == ["t2", "t1"]
+
+
+def test_cap_per_source_is_independent_per_source_page():
+    opps = [opportunity(A, "t1", score=0.9), opportunity(B, "t2", score=0.8)]
+    kept = _cap_per_source(opps, max_per_source=1)
+    assert len(kept) == 2
+
+
+def test_cap_per_source_zero_disables_all_recommendations():
+    kept = _cap_per_source([opportunity(A, "t1", score=0.9)], max_per_source=0)
+    assert kept == []

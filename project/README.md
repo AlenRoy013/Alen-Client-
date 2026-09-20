@@ -144,6 +144,8 @@ SITEMAP_PATH=
 VALIDATION_LIMIT=5       # how many sitemap URLs to process per run
 JEV_CONCURRENCY=5
 RELEVANCE_THRESHOLD=0.5  # normalized 0-1 minimum to surface an opportunity
+MAX_OPPORTUNITIES_PER_SOURCE=3  # cap recommendations per source page (avoids "excessive linking")
+URL_INCLUDE_PATTERN=      # optional substring filter on the sitemap inventory, e.g. /blogs/
 ```
 `SITEMAP_PATH` accepts a local file path or a remote URL, and follows
 sitemap-index files recursively. Outputs land in `data/output/`:
