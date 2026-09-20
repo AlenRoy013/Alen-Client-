@@ -32,7 +32,7 @@ OPPORTUNITY_FIELDS = [
 
 
 def load_config() -> dict:
-    load_dotenv(BASE_DIR / ".env")
+    load_dotenv(BASE_DIR / ".env", override=True)
     config = {
         "jev_api_key": os.getenv("JEV_API_KEY"),
         "jev_api_base_url": os.getenv("JEV_API_BASE_URL"),
