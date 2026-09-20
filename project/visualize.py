@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from urllib.parse import urlparse
 
 import networkx as nx
@@ -149,6 +150,16 @@ def build_visualization(
 def _inject_controls(path: str, sections: list[str]) -> None:
     with open(path, "r", encoding="utf-8") as f:
         doc = f.read()
+
+    # pyvis (as of 0.3.2) writes a malformed cdnjs CSS path (doubled "dist/dist")
+    # and a dead "../node_modules/vis/..." stylesheet reference that only ever
+    # exists inside a node project -- both 404 and were verified against this
+    # installed version's actual output, not assumed.
+    doc = doc.replace(
+        "cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css",
+        "cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.css",
+    )
+    doc = re.sub(r'\s*<link rel="stylesheet"\s+href="\.\./node_modules/vis/dist/vis\.min\.css"[^>]*>\n?', "", doc)
 
     section_options = "".join(f'<option value="{s}">{s}</option>' for s in sections)
     panel = _PANEL_HTML.replace("{{SECTION_OPTIONS}}", section_options)
