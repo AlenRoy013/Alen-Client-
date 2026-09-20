@@ -48,7 +48,7 @@ per project constraints. Intermediate state is JSON files under
 | 4. Existing link graph + orphan detection | Done — `pipeline.py` (networkx) |
 | 6. Opportunity text assembly | Done — `opportunity_text.py` |
 | Live end-to-end run (real site + real Jev call) | **Cannot run from this sandbox** — see below |
-| 7. Interactive visualization | Not started |
+| 7. Interactive visualization | Done — `visualize.py` (pyvis/vis.js), demo at `data/output/site_link_graph.html` via `demo_visualization.py` |
 
 31 tests pass: `python3 -m pytest tests/`.
 
@@ -107,6 +107,24 @@ the Phase 3/10 "test with 5 real URLs" step needs to run somewhere with
 outbound network access to both the target site and `api.typesafe.ai`:
 your own machine, or a CI/cloud environment without this restriction.
 There's no API key that fixes this from here.
+
+## Visualization (Phase 7)
+
+`visualize.py` renders `data/output/site_link_graph.html` — an interactive
+vis.js network graph with a control panel (search, filter by link type /
+confidence / section, orphan-only toggle, click-for-details, CSV export of
+currently-visible recommendations). It's generated automatically at the end
+of `main.py`.
+
+Node color/grouping ("Section") is a **heuristic** derived from each URL's
+first path segment (e.g. `/blog/...` -> `blog`) — there is no topic-
+clustering step in this pipeline, so this is deliberately not labeled
+"Topic" in the UI to avoid overclaiming a capability that wasn't built.
+
+Since live crawling can't run from this sandbox, `demo_visualization.py`
+generates the same visualization from synthetic sample data so its actual
+behavior can be reviewed before a real run. It's not part of the pipeline
+or test suite.
 
 ## Running what exists today
 

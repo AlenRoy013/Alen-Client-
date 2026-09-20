@@ -1,8 +1,8 @@
 """Entry point for the Internal Linking Intelligence pipeline.
 
-Runs, today: sitemap ingestion -> page fetch -> existing link graph ->
-orphan detection -> (if JEV_API_KEY is set) Jev-judged opportunity
-detection. Visualization (Phase 7) is not wired in yet -- see README.
+Runs: sitemap ingestion -> page fetch -> existing link graph -> orphan
+detection -> (if JEV_API_KEY is set) Jev-judged opportunity detection ->
+interactive HTML visualization.
 """
 
 import asyncio
@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 
 from pipeline import build_existing_link_graph, detect_orphans, fetch_pages, find_opportunities
 from sitemap_utils import build_url_inventory, parse_sitemap
+from visualize import build_visualization
 
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "data" / "output"
@@ -115,33 +116,37 @@ def main() -> None:
     print(f"\nExisting link graph: {graph.number_of_nodes()} node(s), {graph.number_of_edges()} edge(s)")
     print(f"Orphan / not-analyzed pages: {len(orphans)} -- see data/output/orphan_pages.csv")
 
-    if not config["jev_api_key"]:
-        print("\nJEV_API_KEY not set -- stopping before Jev-powered opportunity detection.")
-        return
+    opportunities, errors = [], []
+    if config["jev_api_key"]:
+        print("\nRunning Jev-powered opportunity detection...")
+        opportunities, errors = asyncio.run(find_opportunities(
+            pages, graph,
+            api_key=config["jev_api_key"],
+            base_url=config["jev_api_base_url"],
+            model=config["jev_model"],
+            concurrency=config["jev_concurrency"],
+            relevance_threshold=config["relevance_threshold"],
+        ))
 
-    print("\nRunning Jev-powered opportunity detection...")
-    opportunities, errors = asyncio.run(find_opportunities(
-        pages, graph,
-        api_key=config["jev_api_key"],
-        base_url=config["jev_api_base_url"],
-        model=config["jev_model"],
-        concurrency=config["jev_concurrency"],
-        relevance_threshold=config["relevance_threshold"],
-    ))
+        with open(OUTPUT_DIR / "internal_link_opportunities.csv", "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=OPPORTUNITY_FIELDS)
+            writer.writeheader()
+            for opp in opportunities:
+                writer.writerow(asdict(opp))
 
-    with open(OUTPUT_DIR / "internal_link_opportunities.csv", "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=OPPORTUNITY_FIELDS)
-        writer.writeheader()
-        for opp in opportunities:
-            writer.writerow(asdict(opp))
+        if errors:
+            with open(OUTPUT_DIR / "jev_errors.json", "w") as f:
+                json.dump([asdict(err) for err in errors], f, indent=2)
 
-    if errors:
-        with open(OUTPUT_DIR / "jev_errors.json", "w") as f:
-            json.dump([asdict(err) for err in errors], f, indent=2)
+        print(f"Found {len(opportunities)} opportunit(y/ies) -- data/output/internal_link_opportunities.csv")
+        if errors:
+            print(f"{len(errors)} Jev call(s) failed -- see data/output/jev_errors.json")
+    else:
+        print("\nJEV_API_KEY not set -- skipping opportunity detection (graph/orphans still visualized).")
 
-    print(f"Found {len(opportunities)} opportunit(y/ies) -- data/output/internal_link_opportunities.csv")
-    if errors:
-        print(f"{len(errors)} Jev call(s) failed -- see data/output/jev_errors.json")
+    viz_path = OUTPUT_DIR / "site_link_graph.html"
+    build_visualization(pages, graph, opportunities, orphans, str(viz_path))
+    print(f"\nInteractive visualization written to {viz_path}")
 
 
 if __name__ == "__main__":
